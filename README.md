@@ -349,3 +349,173 @@ ensure_annotations is a decorator that ensures that the correct data type is use
 
 trials.ipynb
 ```
+
+## Workflows
+
+### VSCode
+
+1. Update config.yaml
+    ```
+    artifacts_root: artifacts
+
+    data_ingestion:
+        root_dir: artifacts/data_ingestion
+        source_url: https://github.com/sclauguico/end-to-end-mlops/raw/main/data/winequality-data.zip
+        local_data_file: artifacts/data_ingestion/data.zip
+        unzip_dir: artifacts/data_ingestion
+    ```
+2. Update schema.yaml
+3. Update params.yaml
+4. Update the entity
+
+    Try in the 01_data_ingestion.ipynb and copy to entity > config_path.py to update the entity:
+
+    ```python
+        from dataclasses import dataclass
+        from pathlib import Path
+
+
+        @dataclass(frozen=True)
+        class DataIngestionConfig:
+            root_dir: Path
+            source_URL: str
+            local_data_file: Path
+            unzip_dir: Path
+    ```
+5. Update the configuration manager in src config
+
+    In the constant constructor, define the following paths:
+    ```
+        from pathlib import Path
+
+        CONFIG_FILE_PATH = Path("config/config.yaml")
+        PARAMS_FILE_PATH = Path("params.yaml")
+        SCHEMA_FILE_PATH = Path("schema.yaml")
+    ```
+
+    In the 01_data_ingestion.ipynb, try updating the config manager and and then copy to src > components > config > configuration.py:
+
+    ```python
+
+        from mlProject.constants import *
+        from mlProject.utils.common import read_yaml, create_directories
+
+        class ConfigurationManager:
+            def __init__(
+                self,
+                config_filepath = CONFIG_FILE_PATH,
+                params_filepath = PARAMS_FILE_PATH,
+                schema_filepath = SCHEMA_FILE_PATH):
+
+                self.config = read_yaml(config_filepath)
+                self.params = read_yaml(params_filepath)
+                self.schema = read_yaml(schema_filepath)
+
+                create_directories([self.config.artifacts_root])
+
+
+            
+            def get_data_ingestion_config(self) -> DataIngestionConfig:
+                config = self.config.data_ingestion
+
+                create_directories([config.root_dir])
+
+                data_ingestion_config = DataIngestionConfig(
+                    root_dir=config.root_dir,
+                    source_URL=config.source_URL,
+                    local_data_file=config.local_data_file,
+                    unzip_dir=config.unzip_dir 
+                )
+
+                return data_ingestion_config
+    ```
+6. Update the components
+
+    Try in 01_data_ingestion.ipynb and then copy and implement to a new file under components > data_ingestion.ipynb
+
+    ```python
+            import os
+            import urllib.request as request
+            import zipfile
+            from mlProject import logger
+            from mlProject.utils.common import get_size
+
+            class DataIngestion:
+            def __init__(self, config: DataIngestionConfig):
+                self.config = config
+
+
+            def download_file(self):
+                if not os.path.exists(self.config.local_data_file):
+                    filename, headers = request.urlretrieve(
+                        url = self.config.source_URL,
+                        filename = self.config.local_data_file
+                    )
+                    logger.info(f"{filename} download! with following info: \n{headers}")
+                else:
+                    logger.info(f"File already exists of size: {get_size(Path(self.config.local_data_file))}")
+
+
+            def extract_zip_file(self):
+                """
+                zip_file_path: str
+                Extracts the zip file into the data directory
+                Function returns None
+                """
+                unzip_path = self.config.unzip_dir
+                os.makedirs(unzip_path, exist_ok=True)
+                with zipfile.ZipFile(self.config.local_data_file, 'r') as zip_ref:
+                    zip_ref.extractall(unzip_path)
+        
+    ```
+7. Update the pipeline
+
+    Create a new file under the pipeline folder called stage_01_data.ingestion.py
+
+    ```python
+    try:
+        config = ConfigurationManager()
+        data_ingestion_config = config.get_data_ingestion_config()
+        data_ingestion = DataIngestion(config=data_ingestion_config)
+        data_ingestion.download_file()
+        data_ingestion.extract_zip_file()
+    except Exception as e:
+        raise e
+    ```
+
+    Add the following on params.yaml and schema.yaml so they will not be empty
+
+    ```python
+        key: val    
+    ```
+8. Update the main.py
+    On main.py call the stage 1: data ingestion
+
+    ```python
+        from mlProject import logger
+        from mlProject.pipeline.stage_01_data_ingestion import DataIngestionTrainingPipeline
+
+        STAGE_NAME = "Data Ingestion stage"
+        try:
+            logger.info(f">>>>>> stage {STAGE_NAME} started <<<<<<") 
+            data_ingestion = DataIngestionTrainingPipeline()
+            data_ingestion.main()
+            logger.info(f">>>>>> stage {STAGE_NAME} completed <<<<<<\n\nx==========x")
+        except Exception as e:
+                logger.exception(e)
+                raise e
+    ```
+
+9. Update the app.py
+
+### GUI
+
+1. Delete the artifacts folder
+
+### Terminal 
+
+1. 
+```
+python main.py
+```
+
