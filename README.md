@@ -78,7 +78,7 @@ ctrl +shift + `
 python template.py
 ```
 
-## 2. Install packages and implement setup
+## 2. Install Packages and Implement Setup
 
 1. On requirements.txt add the following packages:
 
