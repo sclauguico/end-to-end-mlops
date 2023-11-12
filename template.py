@@ -1,21 +1,3 @@
-## End to End MLOPS
-
-
-### GitHub Repo
-
-1. Create a repossitory
-2. Clone repo to local 
-
-### VSCode
-
-1. Create a template.py
-
-<p> 
-This script creates a folder structure template of the entire project.
-</p>
-
-```python
-
 import os
 from pathlib import Path
 import logging
@@ -49,7 +31,11 @@ list_of_files = [
     "research/trials.ipynb",
     "templates/index.html",
     "test.py"
+
+
 ]
+
+
 
 
 for filepath in list_of_files:
@@ -69,12 +55,3 @@ for filepath in list_of_files:
 
     else:
         logging.info(f"{filename} is already exists")
-```
-
-### Terminal
-
-ctrl +shift + `
-
-```
-python template.py
-```
