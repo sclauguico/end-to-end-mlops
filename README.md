@@ -694,7 +694,7 @@ python main.py
     ```
 7. Update the pipeline
 
-    On 02-data_validation.ipynb
+    On 02_data_validation.ipynb
     ```python
         try:
             config = ConfigurationManager()
@@ -705,7 +705,7 @@ python main.py
             raise e
     ```
 
-    Create a new file under the pipeline folder called stage_02_data.validation.py
+    Create a new file under the pipeline folder called stage_02_data_validation.py
 
     ```python
         from mlProject.config.configuration import ConfigurationManager
@@ -730,6 +730,218 @@ python main.py
             try:
                 logger.info(f">>>>>> stage {STAGE_NAME} started <<<<<<")
                 obj = DataValidationTrainingPipeline()
+                obj.main()
+                logger.info(f">>>>>> stage {STAGE_NAME} completed <<<<<<\n\nx==========x")
+            except Exception as e:
+                logger.exception(e)
+                raise e
+
+
+    ```
+
+    Add the following on params.yaml and schema.yaml so they will not be empty
+
+    ```python
+        key: val    
+    ```
+8. Update the main.py
+    On main.py call the stage 1: data ingestion
+
+    ```python
+        from mlProject import logger
+        from mlProject.pipeline.stage_01_data_validation import DataValidationTrainingPipeline
+
+        STAGE_NAME = "Data Validation stage"
+        try:
+        logger.info(f">>>>>> stage {STAGE_NAME} started <<<<<<") 
+        data_ingestion = DataValidationTrainingPipeline()
+        data_ingestion.main()
+        logger.info(f">>>>>> stage {STAGE_NAME} completed <<<<<<\n\nx==========x")
+        except Exception as e:
+                logger.exception(e)
+                raise e
+    ```
+
+9. Update the app.py
+
+### GUI
+
+1. Delete the artifacts folder
+
+### Terminal 
+
+1. 
+```
+python main.py
+```
+
+## Data Transformation Workflow
+
+### VSCode
+
+1. Update config.yaml
+    ```
+        artifacts_root: artifacts
+
+        data_transformation:
+        root_dir: artifacts/data_transformation
+        data_path: artifacts/data_ingestion/winequality-red.csv
+
+    ```
+2. Update schema.yaml
+3. Update params.yaml
+4. Update the entity
+
+    Try in the 02_data_validation.ipynb and copy to entity > config_entity.py to update the entity:
+
+    ```python
+        from dataclasses import dataclass
+        from pathlib import Path
+
+        @dataclass(frozen=True)
+        class DataTransformationConfig:
+            root_dir: Path
+            data_path: Path
+    ```
+5. Update the configuration manager in src config
+
+    In the constant constructor, define the following paths:
+    ```
+        from pathlib import Path
+
+        CONFIG_FILE_PATH = Path("config/config.yaml")
+        PARAMS_FILE_PATH = Path("params.yaml")
+        SCHEMA_FILE_PATH = Path("schema.yaml")
+    ```
+
+    In the 03_data_transfromation.ipynb, try updating the config manager and and then copy to src > components > config > configuration.py:
+
+    ```python
+
+        class ConfigurationManager:
+            def __init__(
+                self,
+                config_filepath = CONFIG_FILE_PATH,
+                params_filepath = PARAMS_FILE_PATH,
+                schema_filepath = SCHEMA_FILE_PATH):
+
+                self.config = read_yaml(config_filepath)
+                self.params = read_yaml(params_filepath)
+                self.schema = read_yaml(schema_filepath)
+
+                create_directories([self.config.artifacts_root])
+
+
+            
+            def get_data_transformation_config(self) -> DataTransformationConfig:
+                config = self.config.data_transformation
+
+                create_directories([config.root_dir])
+
+                data_transformation_config = DataTransformationConfig(
+                    root_dir=config.root_dir,
+                    data_path=config.data_path,
+                )
+
+                return data_transformation_config
+    ```
+6. Update the components
+
+    Try in 03_data_transformation.ipynb and then copy and implement to a new file under components > data_transformation.ipynb
+
+    ```python
+        import os
+        from mlProject import logger
+        from sklearn.model_selection import train_test_split
+        import pandas as pd
+        import pandas as pd
+        from mlProject.entity.config_entity import DataTransformationConfig
+
+
+        class DataTransformation:
+        def __init__(self, config: DataTransformationConfig):
+            self.config = config
+
+        
+        ## Note: You can add different data transformation techniques such as Scaler, PCA and all
+        #You can perform all kinds of EDA in ML cycle here before passing this data to the model
+
+        # I am only adding train_test_spliting cz this data is already cleaned up
+
+
+        def train_test_spliting(self):
+            data = pd.read_csv(self.config.data_path)
+
+            # Split the data into training and test sets. (0.75, 0.25) split.
+            train, test = train_test_split(data)
+
+            train.to_csv(os.path.join(self.config.root_dir, "train.csv"),index = False)
+            test.to_csv(os.path.join(self.config.root_dir, "test.csv"),index = False)
+
+            logger.info("Splited data into training and test sets")
+            logger.info(train.shape)
+            logger.info(test.shape)
+
+            print(train.shape)
+            print(test.shape)
+        
+    ```
+7. Update the pipeline
+
+    On 03_data_transformation.ipynb
+    ```python
+        try:
+            config = ConfigurationManager()
+            data_transformation_config = config.get_data_transformation_config()
+            data_transformation = DataTransformation(config=data_transformation_config)
+            data_transformation.train_test_spliting()
+        except Exception as e:
+            raise e
+    ```
+
+    Create a new file under the pipeline folder called stage_03_data_transformation.py
+
+    ```python
+        from mlProject.config.configuration import ConfigurationManager
+        from mlProject.components.data_transformation import DataTransformation
+        from mlProject import logger
+        from pathlib import Path
+
+
+
+
+        STAGE_NAME = "Data Transformation stage"
+
+        class DataTransformationTrainingPipeline:
+            def __init__(self):
+                pass
+
+
+            def main(self):
+                try:
+                    with open(Path("artifacts/data_validation/status.txt"), "r") as f:
+                        status = f.read().split(" ")[-1]
+
+                    if status == "True":
+                        config = ConfigurationManager()
+                        data_transformation_config = config.get_data_transformation_config()
+                        data_transformation = DataTransformation(config=data_transformation_config)
+                        data_transformation.train_test_spliting()
+
+                    else:
+                        raise Exception("You data schema is not valid")
+
+                except Exception as e:
+                    print(e)
+
+
+
+
+
+        if __name__ == '__main__':
+            try:
+                logger.info(f">>>>>> stage {STAGE_NAME} started <<<<<<")
+                obj = DataTransformationTrainingPipeline()
                 obj.main()
                 logger.info(f">>>>>> stage {STAGE_NAME} completed <<<<<<\n\nx==========x")
             except Exception as e:
