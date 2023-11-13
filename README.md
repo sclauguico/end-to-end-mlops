@@ -350,7 +350,7 @@ ensure_annotations is a decorator that ensures that the correct data type is use
 trials.ipynb
 ```
 
-## Workflows
+## Data Ingestion Workflow
 
 ### VSCode
 
@@ -368,7 +368,7 @@ trials.ipynb
 3. Update params.yaml
 4. Update the entity
 
-    Try in the 01_data_ingestion.ipynb and copy to entity > config_path.py to update the entity:
+    Try in the 01_data_ingestion.ipynb and copy to entity > config_entity.py to update the entity:
 
     ```python
         from dataclasses import dataclass
@@ -470,17 +470,49 @@ trials.ipynb
     ```
 7. Update the pipeline
 
+    On 01_data_ingestion.ipynb,
+    ```python
+            try:
+                config = ConfigurationManager()
+                data_ingestion_config = config.get_data_ingestion_config()
+                data_ingestion = DataIngestion(config=data_ingestion_config)
+                data_ingestion.download_file()
+                data_ingestion.extract_zip_file()
+            
+            except Exception as e:
+                raise e
+    ```
+
     Create a new file under the pipeline folder called stage_01_data.ingestion.py
 
     ```python
-    try:
-        config = ConfigurationManager()
-        data_ingestion_config = config.get_data_ingestion_config()
-        data_ingestion = DataIngestion(config=data_ingestion_config)
-        data_ingestion.download_file()
-        data_ingestion.extract_zip_file()
-    except Exception as e:
-        raise e
+            from mlProject.config.configuration import ConfigurationManager
+            from mlProject.components.data_ingestion import DataIngestion
+            from mlProject import logger
+
+            STAGE_NAME = "Data Ingestion stage"
+
+            class DataIngestionTrainingPipeline:
+                def __init__(self):
+                    pass
+
+                def main(self):
+                    config = ConfigurationManager()
+                    data_ingestion_config = config.get_data_ingestion_config()
+                    data_ingestion = DataIngestion(config=data_ingestion_config)
+                    data_ingestion.download_file()
+                    data_ingestion.extract_zip_file()
+
+                
+            if __name__ == '__main__':
+                try:
+                    logger.info(f">>>>>> stage {STAGE_NAME} started <<<<<<")
+                    obj = DataIngestionTrainingPipeline()
+                    obj.main()
+                    logger.info(f">>>>>> stage {STAGE_NAME} completed <<<<<<\n\nx==========x")
+                except Exception as e:
+                    logger.exception(e)
+            raise e
     ```
 
     Add the following on params.yaml and schema.yaml so they will not be empty
@@ -519,3 +551,226 @@ trials.ipynb
 python main.py
 ```
 
+
+## Data Validation Workflow
+
+### VSCode
+
+1. Update config.yaml
+    ```
+        artifacts_root: artifacts
+
+        data_validation:
+        root_dir: artifacts/data_validation
+        unzip_data_dir: artifacts/data_ingestion/winequality-red.csv
+        STATUS_FILE: artifacts/data_validation/status.txt
+    ```
+2. Update schema.yaml
+    ```
+        COLUMNS:
+        fixed acidity: float64
+        volatile acidity: float64
+        citric acid: float64
+        residual sugar: float64
+        chlorides: float64
+        free sulfur dioxide: float64
+        total sulfur dioxide: float64
+        density: float64
+        pH: float64
+        sulphates: float64
+        alcohol: float64
+        quality: int64
+
+
+        TARGET_COLUMN:
+        name: quality
+    ```
+3. Update params.yaml
+4. Update the entity
+
+    Try in the 02_data_validation.ipynb and copy to entity > config_entity.py to update the entity:
+
+    ```python
+        from dataclasses import dataclass
+        from pathlib import Path
+
+
+        @dataclass(frozen=True)
+        class DataValidationConfig:
+            root_dir: Path
+            STATUS_FILE: str
+            unzip_data_dir: Path
+            all_schema:dict
+    ```
+5. Update the configuration manager in src config
+
+    In the constant constructor, define the following paths:
+    ```
+        from pathlib import Path
+
+        CONFIG_FILE_PATH = Path("config/config.yaml")
+        PARAMS_FILE_PATH = Path("params.yaml")
+        SCHEMA_FILE_PATH = Path("schema.yaml")
+    ```
+
+    In the 02_data_validation.ipynb, try updating the config manager and and then copy to src > components > config > configuration.py:
+
+    ```python
+
+        from mlProject.constants import *
+        from mlProject.utils.common import read_yaml, create_directories
+
+
+            def __init__(
+                self,
+                config_filepath = CONFIG_FILE_PATH,
+                params_filepath = PARAMS_FILE_PATH,
+                schema_filepath = SCHEMA_FILE_PATH):
+
+                self.config = read_yaml(config_filepath)
+                self.params = read_yaml(params_filepath)
+                self.schema = read_yaml(schema_filepath)
+
+                create_directories([self.config.artifacts_root])
+
+
+            
+            def get_data_validation_config(self) -> DataValidationConfig:
+                config = self.config.data_validation
+                schema = self.schema.COLUMNS
+
+                create_directories([config.root_dir])
+
+                data_validation_config = DataValidationConfig(
+                    root_dir=config.root_dir,
+                    STATUS_FILE=config.STATUS_FILE,
+                    unzip_data_dir = config.unzip_data_dir,
+                    all_schema=schema,
+                )
+
+                return data_validation_config
+    ```
+6. Update the components
+
+    Try in 02_data_validation.ipynb and then copy and implement to a new file under components > data_validation.ipynb
+
+    ```python
+            import os
+            from mlProject import logger
+            from mlProject.entity.config_entity import DataValidationConfig
+            import pandas as pd
+
+
+            class DataValidation:
+                def __init__(self, config: DataValidationConfig):
+                    self.config = config
+
+
+                def validate_all_columns(self)-> bool:
+                    try:
+                        validation_status = None
+
+                        data = pd.read_csv(self.config.unzip_data_dir)
+                        all_cols = list(data.columns)
+
+                        all_schema = self.config.all_schema.keys()
+
+                        
+                        for col in all_cols:
+                            if col not in all_schema:
+                                validation_status = False
+                                with open(self.config.STATUS_FILE, 'w') as f:
+                                    f.write(f"Validation status: {validation_status}")
+                            else:
+                                validation_status = True
+                                with open(self.config.STATUS_FILE, 'w') as f:
+                                    f.write(f"Validation status: {validation_status}")
+
+                        return validation_status
+                    
+                    except Exception as e:
+                        raise e
+
+    ```
+7. Update the pipeline
+
+    On 02-data_validation.ipynb
+    ```python
+        try:
+            config = ConfigurationManager()
+            data_validation_config = config.get_data_validation_config()
+            data_validation = DataValidation(config=data_validation_config)
+            data_validation.validate_all_columns()
+        except Exception as e:
+            raise e
+    ```
+
+    Create a new file under the pipeline folder called stage_02_data.validation.py
+
+    ```python
+        from mlProject.config.configuration import ConfigurationManager
+        from mlProject.components.data_validation import DataValidation
+        from mlProject import logger
+
+
+        STAGE_NAME = "Data Validation stage"
+
+        class DataValidationTrainingPipeline:
+            def __init__(self):
+                pass
+
+            def main(self):
+                config = ConfigurationManager()
+                data_validation_config = config.get_data_validation_config()
+                data_validation = DataValidation(config=data_validation_config)
+                data_validation.validate_all_columns()
+
+
+        if __name__ == '__main__':
+            try:
+                logger.info(f">>>>>> stage {STAGE_NAME} started <<<<<<")
+                obj = DataValidationTrainingPipeline()
+                obj.main()
+                logger.info(f">>>>>> stage {STAGE_NAME} completed <<<<<<\n\nx==========x")
+            except Exception as e:
+                logger.exception(e)
+                raise e
+
+
+    ```
+
+    Add the following on params.yaml and schema.yaml so they will not be empty
+
+    ```python
+        key: val    
+    ```
+8. Update the main.py
+    On main.py call the stage 1: data ingestion
+
+    ```python
+        from mlProject import logger
+        from mlProject.pipeline.stage_01_data_validation import DataValidationTrainingPipeline
+
+        STAGE_NAME = "Data Validation stage"
+        try:
+        logger.info(f">>>>>> stage {STAGE_NAME} started <<<<<<") 
+        data_ingestion = DataValidationTrainingPipeline()
+        data_ingestion.main()
+        logger.info(f">>>>>> stage {STAGE_NAME} completed <<<<<<\n\nx==========x")
+        except Exception as e:
+                logger.exception(e)
+                raise e
+    ```
+
+9. Update the app.py
+
+### GUI
+
+1. Delete the artifacts folder
+
+### Terminal 
+
+1. 
+```
+python main.py
+```
