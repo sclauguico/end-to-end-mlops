@@ -745,17 +745,17 @@ python main.py
         key: val    
     ```
 8. Update the main.py
-    On main.py call the stage 1: data ingestion
+    On main.py call the stage 2: data validation
 
     ```python
         from mlProject import logger
-        from mlProject.pipeline.stage_01_data_validation import DataValidationTrainingPipeline
+        from mlProject.pipeline.stage_02_data_validation import DataValidationTrainingPipeline
 
         STAGE_NAME = "Data Validation stage"
         try:
         logger.info(f">>>>>> stage {STAGE_NAME} started <<<<<<") 
-        data_ingestion = DataValidationTrainingPipeline()
-        data_ingestion.main()
+        data_validation = DataValidationTrainingPipeline()
+        data_validation.main()
         logger.info(f">>>>>> stage {STAGE_NAME} completed <<<<<<\n\nx==========x")
         except Exception as e:
                 logger.exception(e)
@@ -792,7 +792,7 @@ python main.py
 3. Update params.yaml
 4. Update the entity
 
-    Try in the 02_data_validation.ipynb and copy to entity > config_entity.py to update the entity:
+    Try in the 03_data_transformation.ipynb and copy to entity > config_entity.py to update the entity:
 
     ```python
         from dataclasses import dataclass
@@ -909,7 +909,6 @@ python main.py
 
 
 
-
         STAGE_NAME = "Data Transformation stage"
 
         class DataTransformationTrainingPipeline:
@@ -935,9 +934,6 @@ python main.py
                     print(e)
 
 
-
-
-
         if __name__ == '__main__':
             try:
                 logger.info(f">>>>>> stage {STAGE_NAME} started <<<<<<")
@@ -961,13 +957,224 @@ python main.py
 
     ```python
         from mlProject import logger
-        from mlProject.pipeline.stage_01_data_validation import DataValidationTrainingPipeline
+        from mlProject.pipeline.stage_03_data_transformation import DataTransformationTrainingPipeline
 
-        STAGE_NAME = "Data Validation stage"
+
+        STAGE_NAME = "Data Transformation stage"
         try:
         logger.info(f">>>>>> stage {STAGE_NAME} started <<<<<<") 
-        data_ingestion = DataValidationTrainingPipeline()
-        data_ingestion.main()
+        data_transformation = DataTransformationTrainingPipeline()
+        data_transformation.main()
+        logger.info(f">>>>>> stage {STAGE_NAME} completed <<<<<<\n\nx==========x")
+        except Exception as e:
+                logger.exception(e)
+                raise e
+    ```
+
+9. Update the app.py
+
+### GUI
+
+1. Delete the artifacts folder
+
+### Terminal 
+
+1. 
+```
+python main.py
+```
+
+
+## Model Training Workflow
+
+### VSCode
+
+1. Update config.yaml
+    ```
+        artifacts_root: artifacts
+
+       model_trainer:
+            root_dir: artifacts/model_trainer
+            train_data_path: artifacys/data_transformation/train.csv
+            test_data_path: artifacts/data_transformation/test.csv
+            model_name: model.joblib
+
+    ```
+2. Update schema.yaml
+3. Update params.yaml
+
+    ```
+        ElasticNet:
+            alpha: 0.2
+            l1_ratio: 0.1
+    
+    ```
+4. Update the entity
+
+    Try in the 04_model_trainer.ipynb and copy to entity > config_entity.py to update the entity:
+
+    ```python
+        from dataclasses import dataclass
+        from pathlib import Path
+
+        @dataclass(frozen=True)
+        class ModelTrainerConfig:
+            root_dir: Path
+            train_data_path: Path
+            test_data_path: Path
+            model_name: str
+            alpha: float
+            l1_ratio: float
+            target_column: str
+    ```
+5. Update the configuration manager in src config
+
+    In the constant constructor, define the following paths:
+    ```
+        from pathlib import Path
+
+        CONFIG_FILE_PATH = Path("config/config.yaml")
+        PARAMS_FILE_PATH = Path("params.yaml")
+        SCHEMA_FILE_PATH = Path("schema.yaml")
+    ```
+
+    In the 04_model_trainer.ipynb, try updating the config manager and and then copy to src > components > config > configuration.py:
+
+    ```python
+
+        class ConfigurationManager:
+            def __init__(
+                self,
+                config_filepath = CONFIG_FILE_PATH,
+                params_filepath = PARAMS_FILE_PATH,
+                schema_filepath = SCHEMA_FILE_PATH):
+
+                self.config = read_yaml(config_filepath)
+                self.params = read_yaml(params_filepath)
+                self.schema = read_yaml(schema_filepath)
+
+                create_directories([self.config.artifacts_root])
+
+
+            def get_model_trainer_config(self) -> ModelTrainerConfig:
+                config = self.config.model_trainer
+                params = self.params.ElasticNet
+                schema =  self.schema.TARGET_COLUMN
+
+                create_directories([config.root_dir])
+
+                model_trainer_config = ModelTrainerConfig(
+                    root_dir=config.root_dir,
+                    train_data_path = config.train_data_path,
+                    test_data_path = config.test_data_path,
+                    model_name = config.model_name,
+                    alpha = params.alpha,
+                    l1_ratio = params.l1_ratio,
+                    target_column = schema.name
+                    
+                )
+
+                return model_trainer_config
+    ```
+6. Update the components
+
+    Try in 04_model_trainer.ipynb and then copy and implement to a new file under components > model_trainer.py
+
+    ```python
+        import pandas as pd
+        import os
+        from mlProject import logger
+        from sklearn.linear_model import ElasticNet
+        import joblib
+        from mlProject.entity.config_entity import ModelTrainerConfig
+
+        class ModelTrainer:
+            def __init__(self, config: ModelTrainerConfig):
+                self.config = config
+
+            
+            def train(self):
+                train_data = pd.read_csv(self.config.train_data_path)
+                test_data = pd.read_csv(self.config.test_data_path)
+
+
+                train_x = train_data.drop([self.config.target_column], axis=1)
+                test_x = test_data.drop([self.config.target_column], axis=1)
+                train_y = train_data[[self.config.target_column]]
+                test_y = test_data[[self.config.target_column]]
+
+
+                lr = ElasticNet(alpha=self.config.alpha, l1_ratio=self.config.l1_ratio, random_state=42)
+                lr.fit(train_x, train_y)
+
+                joblib.dump(lr, os.path.join(self.config.root_dir, self.config.model_name))
+
+        
+    ```
+7. Update the pipeline
+
+    On 04_model_trainer.ipynb
+    ```python
+        try:
+            config = ConfigurationManager()
+            model_trainer_config = config.get_model_trainer_config()
+            model_trainer_config = ModelTrainer(config=model_trainer_config)
+            model_trainer_config.train()
+        except Exception as e:
+            raise e
+    ```
+
+    Create a new file under the pipeline folder called stage_04_model_trainer.py
+
+    ```python
+        from mlProject.config.configuration import ConfigurationManager
+        from mlProject.components.model_trainer import ModelTrainer
+        from mlProject import logger
+
+
+        STAGE_NAME = "Model Trainer stage"
+
+        class ModelTrainerTrainingPipeline:
+            def __init__(self):
+                pass
+
+            def main(self):
+                config = ConfigurationManager()
+                model_trainer_config = config.get_model_trainer_config()
+                model_trainer_config = ModelTrainer(config=model_trainer_config)
+                model_trainer_config.train()
+
+
+        if __name__ == '__main__':
+            try:
+                logger.info(f">>>>>> stage {STAGE_NAME} started <<<<<<")
+                obj = ModelTrainerTrainingPipeline()
+                obj.main()
+                logger.info(f">>>>>> stage {STAGE_NAME} completed <<<<<<\n\nx==========x")
+            except Exception as e:
+                logger.exception(e)
+                raise e
+
+
+    ```
+
+    Add the following on params.yaml and schema.yaml so they will not be empty
+
+    ```python
+        key: val    
+    ```
+8. Update the main.py
+    On main.py call the stage 4: model trainer
+
+    ```python
+        from mlProject import logger
+        from mlProject.pipeline.stage_04_model_trainer import ModelTrainerTrainingPipeline
+
+        STAGE_NAME = "Model Trainer stage"
+        try:
+        logger.info(f">>>>>> stage {STAGE_NAME} started <<<<<<") 
+        model_training = ModelTrainerTrainingPipeline()
+        model_training.main()
         logger.info(f">>>>>> stage {STAGE_NAME} completed <<<<<<\n\nx==========x")
         except Exception as e:
                 logger.exception(e)
